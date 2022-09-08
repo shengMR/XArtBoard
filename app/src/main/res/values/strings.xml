@@ -1,0 +1,17 @@
+<resources>
+    <string name="app_name">XArtBoard</string>
+
+    <string name="rect">方形</string>
+    <string name="square">正方形</string>
+    <string name="oval">椭圆</string>
+    <string name="circle">圆形</string>
+    <string name="save">保存</string>
+    <string name="move">移动</string>
+    <string name="pen">画笔</string>
+    <string name="eraser">橡皮擦</string>
+    <string name="color">调整画笔颜色</string>
+    <string name="retrieve">恢复</string>
+    <string name="retract">撤回</string>
+    <string name="reset">重置</string>
+    <string name="close">关闭</string>
+</resources>
