@@ -2,7 +2,7 @@
 
 XArtBoard是一个Android画板库，可以很方便加载图片到画板上，并对画板进行涂鸦，结束后可以保存图片输出到本地
 
-[<img title="" src="https://jitpack.io/v/shengMR/XArtBoard.svg" alt="Release" data-align="inline">] (https://jitpack.io/shengMR/XArtBoard)
+[![](https://jitpack.io/v/shengMR/XArtBoard.svg)](https://jitpack.io/#shengMR/XArtBoard)
 
 ## 添加库
 
@@ -156,7 +156,5 @@ binding.xartboard.setPenType(XPenType.OVAL)
 // 设置圆形模式
 binding.xartboard.setPenType(XPenType.CIRCLE)
 ```
-
-
 
 ###### 后续功能开发中...
