@@ -38,18 +38,18 @@ class MainActivity : AppCompatActivity(), View.OnLongClickListener {
         binding.eraser.setOnLongClickListener(this)
 
         // 加载本地图片
-        binding.xartboard.loadBitmap(R.drawable.img1, gravity = XGravity.GravityEnd)
+        binding.xartboard.loadBitmap(R.drawable.qm, gravity = XGravity.GravityStart)
         // 加载网络图片
-        Glide.with(this)
-            .asBitmap()
-            .load("https://images.pexels.com/photos/7858743/pexels-photo-7858743.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1")
-            .into(object : SimpleTarget<Bitmap>(){
-                override fun onResourceReady(resource: Bitmap, transition: Transition<in Bitmap>?) {
-                    resource.let { bitmap ->
-                        binding.xartboard.loadBitmap(bitmap, gravity = XGravity.GravityStart)
-                    }
-                }
-            })
+        // Glide.with(this)
+        //     .asBitmap()
+        //     .load("https://images.pexels.com/photos/7858743/pexels-photo-7858743.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1")
+        //     .into(object : SimpleTarget<Bitmap>(){
+        //         override fun onResourceReady(resource: Bitmap, transition: Transition<in Bitmap>?) {
+        //             resource.let { bitmap ->
+        //                 binding.xartboard.loadBitmap(bitmap, gravity = XGravity.GravityStart)
+        //             }
+        //         }
+        //     })
     }
 
     fun onClick(view: View) {

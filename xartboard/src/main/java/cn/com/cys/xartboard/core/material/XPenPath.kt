@@ -20,6 +20,8 @@ data class XPenPath(
 
     private val pathPaint = Paint().apply {
         isAntiAlias = true
+        isDither = true
+        isFilterBitmap = true
         style = Paint.Style.STROKE
         color = penColor
         strokeJoin = Paint.Join.ROUND

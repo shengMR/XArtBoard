@@ -399,6 +399,10 @@ class XPen {
         penColor = color
     }
 
+    fun getPenColor(): Int {
+        return penColor
+    }
+
     fun retract() {
         val penPath = penPaths.removeLastOrNull()
         penPath?.let {
@@ -418,6 +422,13 @@ class XPen {
     fun reset() {
         retractPenPaths.clear()
         penPaths.clear()
+        xArtBoard?.refreshCanvas()
+    }
+
+    fun resetAll() {
+        retractPenPaths.clear()
+        penPaths.clear()
+        penBitmaps.clear()
         xArtBoard?.refreshCanvas()
     }
 }

@@ -1,20 +1,25 @@
 package cn.com.cys.xartboard
 
-import android.animation.AnimatorSet
 import android.animation.ValueAnimator
 import android.content.Context
 import android.content.res.Configuration
 import android.graphics.*
 import android.os.Looper
 import android.util.AttributeSet
-import android.view.*
+import android.view.GestureDetector
+import android.view.MotionEvent
+import android.view.ScaleGestureDetector
+import android.view.View
 import android.widget.FrameLayout
 import androidx.annotation.DrawableRes
 import androidx.core.animation.addListener
-import cn.com.cys.xartboard.helper.XLog
 import cn.com.cys.xartboard.core.material.XMaterial
 import cn.com.cys.xartboard.core.material.XPenBitmap
-import cn.com.cys.xartboard.core.tool.*
+import cn.com.cys.xartboard.core.tool.XGravity
+import cn.com.cys.xartboard.core.tool.XPen
+import cn.com.cys.xartboard.core.tool.XPenType
+import cn.com.cys.xartboard.core.tool.XTest
+import cn.com.cys.xartboard.helper.XLog
 
 /**
  * Author: Damon
@@ -32,13 +37,14 @@ class XArtBoard : FrameLayout, ScaleGestureDetector.OnScaleGestureListener {
     }
 
     // 工具
-    private var viewFrame = RectF() // 画板固定矩形
-    private var scaleViewFrame = RectF() // 画板缩放后的矩形
-    private var artBoardMatrix = Matrix()
+    private val viewFrame = RectF() // 画板固定矩形
+    private val scaleViewFrame = RectF() // 画板缩放后的矩形
+    private val artBoardMatrix = Matrix()
     private val xPen = XPen() // 画笔绘制一切东西
     private var maxScaleFactor = 3f // 最大放大系数
     private var isFixAnimPlay = false // 是否在动画中
-    private var isLandscape = context.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE // 是否横屏
+    private val isLandscape = context.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE // 是否横屏
+    private val animationDuration = 200L
 
     // 手势
     private var scaleGestureDetector: ScaleGestureDetector? = null
@@ -88,6 +94,7 @@ class XArtBoard : FrameLayout, ScaleGestureDetector.OnScaleGestureListener {
         xPenBitmap.currentRect.set(0f, 0f, bitmap.width.toFloat(), bitmap.height.toFloat())
         xPen.addPenBitmap(xPenBitmap)
         requestLayout()
+        refreshCanvas()
     }
     //endregion
 
@@ -138,7 +145,9 @@ class XArtBoard : FrameLayout, ScaleGestureDetector.OnScaleGestureListener {
                 XLog.e("触摸操作：抬起")
                 xPen.onTouchUp(event)
                 xPen.onPathDoneDelay(event)
-                autoFixCanvas()
+                if(mInScaleMode || mInMoveMode){
+                    autoFixCanvas()
+                }
                 mInMoveMode = false
                 mInScaleMode = false
             }
@@ -148,87 +157,109 @@ class XArtBoard : FrameLayout, ScaleGestureDetector.OnScaleGestureListener {
     }
 
     private fun autoFixCanvas() {
-        if (getScaleFactor() < 1f) {
-            XLog.e("自动解决缩放问题：回到最小缩放位置")
-            val valueAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
-                duration = 300
-                addUpdateListener {
-                    val changeX =
-                        (viewFrame.centerX() - scaleViewFrame.centerX()) * it.animatedValue as Float
-                    val changeY =
-                        (viewFrame.centerY() - scaleViewFrame.centerY()) * it.animatedValue as Float
-                    var changeScale =
-                        (viewFrame.width() / scaleViewFrame.width()) * it.animatedValue as Float
-                    changeScale = if (changeScale <= 1f) 1f else changeScale
-                    XLog.e("自动解决缩放问题：changeScale = ${changeScale}")
-                    artBoardMatrix.setScale(
-                        changeScale,
-                        changeScale,
-                        scaleViewFrame.centerX(),
-                        scaleViewFrame.centerY()
-                    )
-                    artBoardMatrix.postTranslate(changeX, changeY)
-                    artBoardMatrix.mapRect(scaleViewFrame)
-                    xPen.onCanvasScroll(-changeX, -changeY)
-                    xPen.onTouchScale(
-                        scaleViewFrame.centerX(),
-                        scaleViewFrame.centerY(),
-                        changeScale
-                    )
-                    invalidate()
-                }
-                addListener(
-                    onStart = { isFixAnimPlay = true },
-                    onEnd = { isFixAnimPlay = false },
-                    onCancel = { isFixAnimPlay = false })
-            }
-            valueAnimator.start()
-        } else {
-            var dLeft: Float? = null
-            var dTop: Float? = null
-            if (scaleViewFrame.left > viewFrame.left) { // 图层被移动到了右边，需要往左边调
-                dLeft = viewFrame.left - scaleViewFrame.left
-            } else if (scaleViewFrame.right < viewFrame.right) { // 图层被移动到了左边，需要往右边调
-                dLeft = viewFrame.right - scaleViewFrame.right
-            }
-            if (scaleViewFrame.top > viewFrame.top) { // 图层被移动到了下边，需要往上边调
-                dTop = viewFrame.top - scaleViewFrame.top
-            } else if (scaleViewFrame.bottom < viewFrame.bottom) { // 图层被移动到了上边，需要往下边调
-                dTop = viewFrame.bottom - scaleViewFrame.bottom
-            }
-
-            if (dLeft == null && dTop == null) {
-                return
-            }
-            val a1 =
-                ValueAnimator.ofFloat(scaleViewFrame.left, scaleViewFrame.left + (dLeft ?: 0f))
-                    ?.apply {
-                        addUpdateListener {
-                            val av = it.animatedValue as Float - scaleViewFrame.left
-                            artBoardMatrix.setTranslate(av, 0f)
-                            artBoardMatrix.mapRect(scaleViewFrame)
-                            xPen.onCanvasScroll(-av, 0f)
-                            invalidate()
-                        }
-                    }
-            val a2 = ValueAnimator.ofFloat(scaleViewFrame.top, scaleViewFrame.top + (dTop ?: 0f))
-                ?.apply {
+        val currentScaleFactor = getScaleFactor()
+        when {
+            currentScaleFactor < 1f -> {
+                ValueAnimator.ofFloat(0f, 1f).apply {
+                    duration = animationDuration
+                    addListener(
+                        onStart = { isFixAnimPlay = true },
+                        onEnd = { isFixAnimPlay = false },
+                        onCancel = { isFixAnimPlay = false })
                     addUpdateListener {
-                        val av = it.animatedValue as Float - scaleViewFrame.top
-                        artBoardMatrix.setTranslate(0f, av)
+                        val changeX =
+                            (viewFrame.centerX() - scaleViewFrame.centerX()) * it.animatedValue as Float
+                        val changeY =
+                            (viewFrame.centerY() - scaleViewFrame.centerY()) * it.animatedValue as Float
+                        var changeScale =
+                            (viewFrame.width() / scaleViewFrame.width()) * it.animatedValue as Float
+                        changeScale = if (changeScale <= 1f) 1f else changeScale
+                        XLog.e("自动解决缩放问题：changeScale = ${changeScale}")
+                        artBoardMatrix.setScale(
+                            changeScale,
+                            changeScale,
+                            scaleViewFrame.centerX(),
+                            scaleViewFrame.centerY()
+                        )
+                        artBoardMatrix.postTranslate(changeX, changeY)
                         artBoardMatrix.mapRect(scaleViewFrame)
-                        xPen.onCanvasScroll(0f, -av)
+                        xPen.onCanvasScroll(-changeX, -changeY)
+                        xPen.onTouchScale(
+                            scaleViewFrame.centerX(),
+                            scaleViewFrame.centerY(),
+                            changeScale
+                        )
                         invalidate()
                     }
+                    start()
                 }
-            val animatorSet = AnimatorSet()
-            animatorSet.duration = 400
-            animatorSet.playTogether(a1, a2)
-            animatorSet.start()
-            animatorSet.addListener(
-                onStart = { isFixAnimPlay = true },
-                onEnd = { isFixAnimPlay = false },
-                onCancel = { isFixAnimPlay = false })
+            }
+            else -> {
+                if(maxScaleFactor < 3f){
+                    maxScaleFactor = 3f
+                }
+                val isOverMax = currentScaleFactor > maxScaleFactor
+                var percentW = 0f
+                var percentH = 0f
+                var maxScaleFrame: RectF? = null
+                if(isOverMax){
+                    percentW = (width / 2f - scaleViewFrame.left) / scaleViewFrame.width()
+                    percentH = (height / 2f - scaleViewFrame.top) / scaleViewFrame.height()
+                    // 可放大的最大矩形
+                    maxScaleFrame = RectF(viewFrame)
+                    artBoardMatrix.setScale(maxScaleFactor, maxScaleFactor)
+                    artBoardMatrix.mapRect(maxScaleFrame)
+                }
+
+                ValueAnimator.ofFloat(0f, 1f).apply {
+                    duration = animationDuration
+                    addListener(
+                        onStart = { isFixAnimPlay = true },
+                        onEnd = { isFixAnimPlay = false },
+                        onCancel = { isFixAnimPlay = false })
+                    addUpdateListener {
+                        var dLeft = 0f
+                        var dTop = 0f
+                        if (scaleViewFrame.left > viewFrame.left) { // 图层被移动到了右边，需要往左边调
+                            dLeft = viewFrame.left - scaleViewFrame.left
+                        } else if (scaleViewFrame.right < viewFrame.right) { // 图层被移动到了左边，需要往右边调
+                            dLeft = viewFrame.right - scaleViewFrame.right
+                        }
+                        if (scaleViewFrame.top > viewFrame.top) { // 图层被移动到了下边，需要往上边调
+                            dTop = viewFrame.top - scaleViewFrame.top
+                        } else if (scaleViewFrame.bottom < viewFrame.bottom) { // 图层被移动到了上边，需要往下边调
+                            dTop = viewFrame.bottom - scaleViewFrame.bottom
+                        }
+                        dLeft *= it.animatedValue as Float
+                        dTop *= it.animatedValue as Float
+                        if(isOverMax && maxScaleFrame != null){
+                            val changeWidth =
+                                scaleViewFrame.width() - (scaleViewFrame.width() - maxScaleFrame.width()) * 0.8 * it.animatedValue as Float
+                            val changeScale = changeWidth.toFloat() / scaleViewFrame.width()
+                            artBoardMatrix.setScale(
+                                changeScale,
+                                changeScale,
+                                scaleViewFrame.left + scaleViewFrame.width() * percentW,
+                                scaleViewFrame.top + scaleViewFrame.height() * percentH
+                            )
+                            artBoardMatrix.postTranslate(dLeft, dTop)
+                            artBoardMatrix.mapRect(scaleViewFrame)
+                            xPen.onCanvasScroll(-dLeft, -dTop)
+                            xPen.onTouchScale(
+                                scaleViewFrame.left + scaleViewFrame.width() * percentW,
+                                scaleViewFrame.top + scaleViewFrame.height() * percentH,
+                                changeScale
+                            )
+                        } else {
+                            artBoardMatrix.setTranslate(dLeft, dTop)
+                            artBoardMatrix.mapRect(scaleViewFrame)
+                            xPen.onCanvasScroll(-dLeft, -dTop)
+                        }
+                        invalidate()
+                    }
+                    start()
+                }
+            }
         }
     }
 
@@ -242,10 +273,6 @@ class XArtBoard : FrameLayout, ScaleGestureDetector.OnScaleGestureListener {
 
     //region 手势缩放
     override fun onScale(detector: ScaleGestureDetector): Boolean {
-        if (detector.scaleFactor > 1f && getScaleFactor() > maxScaleFactor) { // 放大并且在超过系数则不放大
-            return true
-        }
-        XLog.e("缩放中：${detector.scaleFactor}")
         mInScaleMode = true
         artBoardMatrix.setScale(
             detector.scaleFactor,
@@ -303,7 +330,8 @@ class XArtBoard : FrameLayout, ScaleGestureDetector.OnScaleGestureListener {
     }
     //endregion
 
-    fun refreshCanvas() = if(Looper.myLooper() == Looper.getMainLooper()) invalidate() else postInvalidate()
+    fun refreshCanvas() =
+        if (Looper.myLooper() == Looper.getMainLooper()) invalidate() else postInvalidate()
 
     //region ===================================== 公开 ========================================
     /**
@@ -323,7 +351,7 @@ class XArtBoard : FrameLayout, ScaleGestureDetector.OnScaleGestureListener {
     /**
      * 获取画笔模式
      */
-    fun getPenType(): XPenType{
+    fun getPenType(): XPenType {
         return xPen.getPenType()
     }
 
@@ -362,6 +390,10 @@ class XArtBoard : FrameLayout, ScaleGestureDetector.OnScaleGestureListener {
         this.xPen.setPenColor(color)
     }
 
+    fun getPenColor(): Int{
+        return this.xPen.getPenColor()
+    }
+
     /**
      * 撤回
      */
@@ -384,16 +416,23 @@ class XArtBoard : FrameLayout, ScaleGestureDetector.OnScaleGestureListener {
     }
 
     /**
+     * 重置全部，包括加载进来的图片
+     */
+    fun resetAll(){
+        this.xPen.resetAll()
+    }
+
+    /**
      * 设置画笔路径列表
      */
-    fun setPenPaths(penPaths: List<XMaterial>){
+    fun setPenPaths(penPaths: List<XMaterial>) {
         this.xPen.setPenPaths(penPaths)
     }
 
     /**
      * 获取画笔路径列表
      */
-    fun getPenPaths(): List<XMaterial>{
+    fun getPenPaths(): List<XMaterial> {
         return xPen.getPenPaths()
     }
 
@@ -408,6 +447,18 @@ class XArtBoard : FrameLayout, ScaleGestureDetector.OnScaleGestureListener {
      * 获取最终的图片
      */
     private fun getResultBitmap(): Bitmap {
+        val currentScale = getScaleFactor()
+        var needScale = 1f
+        if(currentScale <  maxScaleFactor){
+            needScale = maxScaleFactor / currentScale
+        }
+        artBoardMatrix.setScale(needScale, needScale, scaleViewFrame.centerX(), scaleViewFrame.centerY())
+        artBoardMatrix.mapRect(scaleViewFrame)
+        xPen.onTouchScale(
+            scaleViewFrame.centerX(),
+            scaleViewFrame.centerY(),
+            needScale
+        )
         val resultBitmap = Bitmap.createBitmap(
             scaleViewFrame.width().toInt(),
             scaleViewFrame.height().toInt(),
@@ -419,12 +470,33 @@ class XArtBoard : FrameLayout, ScaleGestureDetector.OnScaleGestureListener {
         artBoardMatrix.setTranslate(-dLeft, -dTop)
         artBoardMatrix.mapRect(scaleViewFrame)
         val canvas = Canvas(resultBitmap)
+        background?.setBounds(0, 0, canvas.width, canvas.height)
         background?.draw(canvas)
         drawTest(canvas)
         xPen.draw(canvas)
         xPen.onCanvasScroll(-dLeft, -dTop)
         artBoardMatrix.setTranslate(dLeft, dTop)
         artBoardMatrix.mapRect(scaleViewFrame)
+
+        // 所有的缩放位移全部恢复原状
+        val scale = getScaleFactor()
+        val changeX = viewFrame.centerX() - scaleViewFrame.centerX()
+        val changeY = viewFrame.centerY() - scaleViewFrame.centerY()
+        val changeScale = 1f / scale
+        artBoardMatrix.setScale(
+            changeScale,
+            changeScale,
+            scaleViewFrame.centerX(),
+            scaleViewFrame.centerY()
+        )
+        artBoardMatrix.postTranslate(changeX, changeY)
+        artBoardMatrix.mapRect(scaleViewFrame)
+        xPen.onCanvasScroll(-changeX, -changeY)
+        xPen.onTouchScale(
+            scaleViewFrame.centerX(),
+            scaleViewFrame.centerY(),
+            changeScale
+        )
         return resultBitmap
     }
     //endregion

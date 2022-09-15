@@ -29,7 +29,7 @@ fun AppCompatActivity.saveXArtBoardToLocal(bitmap: Bitmap, localPath: String, li
                     file.createNewFile()
                 }
                 FileOutputStream(file).use {
-                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, 60, it)
                     it.flush()
                     it.close()
                 }
@@ -54,7 +54,7 @@ fun ViewModel.saveXArtBoardToLocal(bitmap: Bitmap, localPath: String, listener: 
                     file.createNewFile()
                 }
                 FileOutputStream(file).use {
-                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, 60, it)
                     it.flush()
                     it.close()
                 }
